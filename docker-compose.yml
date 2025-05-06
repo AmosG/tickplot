@@ -1,0 +1,40 @@
+# Persistent volumes for Redpanda data
+volumes:
+  redpanda_data: {}
+
+# Services configuration
+services:
+  # Redpanda broker service
+  redpanda-1:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.18
+    container_name: redpanda-1
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --check=false
+      - --advertise-kafka-addr
+      - localhost:9092
+      - --kafka-addr
+      - 0.0.0.0:9092
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    network_mode: host
+
+  # Redpanda Console service
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.3.8
+    container_name: redpanda-console
+    environment:
+      - KAFKA_BROKERS=localhost:9092
+      - CONNECT_ENABLED=false
+      - SCHEMA_REGISTRY_ENABLED=false
+    network_mode: host
