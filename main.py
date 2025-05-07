@@ -5,12 +5,43 @@ from collectors.symbol_collector import SymbolCollector
 from config.settings import KAFKA_BOOTSTRAP_SERVERS, SYMBOLS_TO_COLLECT
 
 async def run_collectors():
-    collectors = [
-        SymbolCollector(symbol, inst_type, kafka_bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
-        for symbol, inst_type in SYMBOLS_TO_COLLECT
-    ]
-    tasks = [asyncio.create_task(collector.run()) for collector in collectors]
-    print(f"Started {len(collectors)} collectors.")
+    collectors = []
+    
+    for config in SYMBOLS_TO_COLLECT:
+        if len(config) == 2:
+            # Standard format: (symbol, instrument_type)
+            symbol, inst_type = config
+            collectors.append(SymbolCollector(
+                symbol, 
+                inst_type, 
+                kafka_bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS
+            ))
+        elif len(config) == 4:
+            # Extended format for options: (symbol, instrument_type, num_strikes, expiration_days)
+            symbol, inst_type, num_strikes, expiration_days = config
+            collectors.append(SymbolCollector(
+                symbol, 
+                inst_type, 
+                kafka_bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                num_strikes=num_strikes,
+                expiration_days=expiration_days
+            ))
+        else:
+            print(f"Invalid configuration format: {config}")
+    
+    print(f"Starting {len(collectors)} collectors...")
+    tasks = []
+    
+    # Start collectors with a small delay between each to avoid connection contention
+    for i, collector in enumerate(collectors):
+        task = asyncio.create_task(collector.run())
+        tasks.append(task)
+        print(f"Started collector {i+1}/{len(collectors)}: {collector.symbol} ({collector.instrument_type.name})")
+        
+        # Add a small delay between starting collectors to avoid connection race conditions
+        if i < len(collectors) - 1:
+            await asyncio.sleep(0.4)
+    
     try:
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:
@@ -60,6 +91,7 @@ async def main():
         print("Please specify a mode: collector or consumer")
         print("Example: python main.py collector")
         print("Example: python main.py consumer --type print --topic ticks")
+        print("Example: python main.py consumer --type print --topic option_ticks")
 
 if __name__ == '__main__':
     try:
