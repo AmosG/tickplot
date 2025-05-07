@@ -149,26 +149,27 @@ class SymbolCollector:
             # For stock tickers
             if hasattr(ticker, 'contract') and hasattr(ticker.contract, 'secType'):
                 if ticker.contract.secType == 'STK' and hasattr(ticker, 'last') and ticker.last:
-                    current_volume = getattr(ticker, 'volume', 0) or 0
-                    if not self.initialized:
+                    if self.instrument_type == InstrumentType.STOCK:
+                        current_volume = getattr(ticker, 'volume', 0) or 0
+                        if not self.initialized:
+                            self.last_volume = current_volume
+                            self.initialized = True
+                            return
+                        tick_volume = max(0, current_volume - self.last_volume)
+                        if tick_volume > 0:
+                            tick = {
+                                'symbol': self.symbol,
+                                'instrument_type': self.instrument_type.name,
+                                'timestamp': current_time.isoformat(),
+                                'price': ticker.last,
+                                'volume': tick_volume
+                            }
+                            # Schedule Kafka send in the event loop
+                            asyncio.run_coroutine_threadsafe(
+                                self.producer.send_and_wait('ticks', json.dumps(tick).encode()), loop
+                            )
+                            logger.info(f"[{self.symbol}] Sent tick: {tick}")
                         self.last_volume = current_volume
-                        self.initialized = True
-                        return
-                    tick_volume = max(0, current_volume - self.last_volume)
-                    if tick_volume > 0:
-                        tick = {
-                            'symbol': self.symbol,
-                            'instrument_type': self.instrument_type.name,
-                            'timestamp': current_time.isoformat(),
-                            'price': ticker.last,
-                            'volume': tick_volume
-                        }
-                        # Schedule Kafka send in the event loop
-                        asyncio.run_coroutine_threadsafe(
-                            self.producer.send_and_wait('ticks', json.dumps(tick).encode()), loop
-                        )
-                        logger.info(f"[{self.symbol}] Sent tick: {tick}")
-                    self.last_volume = current_volume
                 
                 # For option tickers
                 elif ticker.contract.secType == 'OPT' and ticker.contract.conId in self.last_option_volumes:
@@ -184,7 +185,7 @@ class SymbolCollector:
                         log_msg += f", bidSize={ticker.bidSize}"
                     if hasattr(ticker, 'askSize') and ticker.askSize:
                         log_msg += f", askSize={ticker.askSize}"
-                    logger.info(f"[{self.symbol}] {log_msg}")
+                    logger.debug(f"[{self.symbol}] {log_msg}")
                     
                     current_volume = getattr(ticker, 'volume', 0) or 0
                     last_volume = self.last_option_volumes.get(ticker.contract.conId, 0)
@@ -210,7 +211,7 @@ class SymbolCollector:
                     asyncio.run_coroutine_threadsafe(
                         self.producer.send_and_wait('option_ticks', json.dumps(option_tick).encode()), loop
                     )
-                    logger.info(f"[{self.symbol}] Sent option tick: {ticker.contract.strike} {ticker.contract.right}")
+                    logger.debug(f"[{self.symbol}] Sent option tick: {ticker.contract.strike} {ticker.contract.right}")
                     
                     self.last_option_volumes[ticker.contract.conId] = current_volume
 
