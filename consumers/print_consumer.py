@@ -1,20 +1,18 @@
 import asyncio
 import json
 from aiokafka import AIOKafkaConsumer
+from config.settings import KAFKA_BOOTSTRAP_SERVERS
 
-KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
-KAFKA_TOPIC = 'ticks'
-
-async def consume():
+async def consume(topic='ticks', group_id='print-consumer'):
     consumer = AIOKafkaConsumer(
-        KAFKA_TOPIC,
+        topic,
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-        group_id='print-consumer',
+        group_id=group_id,
         auto_offset_reset='earliest',
         enable_auto_commit=True
     )
     await consumer.start()
-    print(f"Connected to Kafka at {KAFKA_BOOTSTRAP_SERVERS}, listening to topic '{KAFKA_TOPIC}'...")
+    print(f"Connected to Kafka at {KAFKA_BOOTSTRAP_SERVERS}, listening to topic '{topic}'...")
     try:
         async for msg in consumer:
             try:
